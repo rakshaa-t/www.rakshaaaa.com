@@ -1,0 +1,24 @@
+{
+  "name": "www.rakshaaaa.com",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start -p 3000",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "next": "14.x",
+    "react": "18.x",
+    "react-dom": "18.x",
+    "framer-motion": "^10.12.6",
+    "lucide-react": "^0.289.0"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.7",
+    "postcss": "^8.4.26",
+    "autoprefixer": "^10.4.14",
+    "typescript": "^5.5.0"
+  }
+}
