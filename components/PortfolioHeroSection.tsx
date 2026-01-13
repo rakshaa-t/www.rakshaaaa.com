@@ -2,7 +2,8 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, PanInfo } from 'framer-motion';
-import { X, ArrowUp, Sparkles, Paperclip, Linkedin, Trash2 } from 'lucide-react';
+import { ArrowUp, Sparkles, Paperclip, Trash2 } from 'lucide-react';
+import Image from 'next/image';
 import { ensureLightMode } from '../lib/utils';
 
 interface DraggableCard {
@@ -86,13 +87,17 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
     }
   ]);
 
+  const generateId = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  };
+
   const [draggedCardId, setDraggedCardId] = useState<string | null>(null);
   const [activeDragCard, setActiveDragCard] = useState<DraggableCard | null>(null);
   const [draggedOverChat, setDraggedOverChat] = useState(false);
-  const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<string>('my-work');
   const [usedCardIds, setUsedCardIds] = useState<Set<string>>(new Set());
-  const [returningCardId, setReturningCardId] = useState<string | null>(null);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(false);
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -138,9 +143,12 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
     if (raw) {
       try {
         const parsed = JSON.parse(raw) as ChatMessage[];
-        if (Array.isArray(parsed)) setMessages(parsed);
+        if (Array.isArray(parsed) && parsed.every(m => m.id && m.type && m.sender)) {
+          setMessages(parsed);
+        }
       } catch (e) {
-        // ignore
+        console.error('Failed to parse saved messages:', e);
+        localStorage.removeItem('portfolio_messages');
       }
     }
   }, []);
@@ -151,7 +159,7 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
     try {
       localStorage.setItem('portfolio_messages', JSON.stringify(messages));
     } catch (e) {
-      // ignore
+      console.error('Failed to save messages to localStorage:', e);
     }
   }, [messages]);
 
@@ -179,7 +187,7 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
     };
 
     const newMessage: ChatMessage = {
-      id: `msg-${Date.now()}`,
+      id: `msg-${generateId()}`,
       type: 'card-with-question',
       content: autoReplyMap[cardId] || '',
       card: { id: card.id, image: card.image, title: card.title },
@@ -215,7 +223,7 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
   const handleSendMessage = () => {
     if (!inputValue.trim()) return;
     const newMessage: ChatMessage = {
-      id: `msg-${Date.now()}`,
+      id: `msg-${generateId()}`,
       type: 'text',
       content: inputValue,
       sender: 'user',
@@ -244,7 +252,15 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
     <section aria-label="Portfolio hero" className="relative isolate overflow-hidden bg-[#F2F2F2] text-zinc-900 min-h-screen pb-32">
       <div aria-hidden className="pointer-events-none absolute inset-0" style={{ backgroundImage: 'radial-gradient(rgba(0,0,0,0.03) 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
 
-      {/* Floating buttons (left/right) omitted for brevity in explanation (they are present) */}
+      {/* Floating social links */}
+      <div className="fixed left-6 top-1/2 -translate-y-1/2 z-20 hidden lg:flex flex-col gap-3">
+        <a href="https://linkedin.com" target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-white border border-black/[0.08] flex items-center justify-center shadow-sm hover:shadow-md transition-shadow" aria-label="LinkedIn">
+          <svg className="w-5 h-5 text-zinc-600" fill="currentColor" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+        </a>
+        <a href="mailto:hello@rakshaaaa.com" className="w-10 h-10 rounded-full bg-white border border-black/[0.08] flex items-center justify-center shadow-sm hover:shadow-md transition-shadow" aria-label="Email">
+          <svg className="w-5 h-5 text-zinc-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+        </a>
+      </div>
 
       <div className="relative z-10 mx-auto max-w-[877px] px-4 pb-20 sm:px-6 lg:px-0" style={{ marginTop: '68px' }}>
         <div className="mx-auto flex flex-col items-center">
@@ -269,7 +285,7 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
                   <motion.div key={message.id} initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -10, scale: 0.95 }} transition={{ duration: 0.3 }} className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`} role="listitem">
                     {message.sender === 'system' && (
                       <div className="flex items-start gap-3 max-w-xs">
-                        <img src="https://storage.googleapis.com/storage.magicpath.ai/user/323295203727400960/assets/a162f3c9-9017-4e52-a2b7-d48614b32b0f.jpg" alt="Raksha avatar" className="w-8 h-8 rounded-full object-cover flex-shrink-0" style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.12)' }} />
+                        <Image src="https://storage.googleapis.com/storage.magicpath.ai/user/323295203727400960/assets/a162f3c9-9017-4e52-a2b7-d48614b32b0f.jpg" alt="Raksha avatar" width={32} height={32} className="w-8 h-8 rounded-full object-cover flex-shrink-0" style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.12)' }} />
                         {(message.type === 'greeting' || message.type === 'text') && (
                           <div className="bg-zinc-50 rounded-[12px] px-4 py-3 border border-black/[0.06]">
                             <p className="text-[13px] text-zinc-700 leading-relaxed"><span>{message.content}</span></p>
@@ -288,7 +304,7 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
                           <div className="space-y-2">
                             <div className="bg-white rounded-[14px] border border-black/[0.08] overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                               <div className="relative w-full overflow-hidden bg-zinc-100" style={{ height: '140px' }}>
-                                <img src={message.card.image} alt={message.card.title} className="w-full h-full object-cover" />
+                                <Image src={message.card.image} alt={message.card.title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 320px" />
                               </div>
                               <div className="p-3"><p className="text-[12px] text-zinc-900 italic leading-tight"><span>{message.card.title}</span></p></div>
                             </div>
@@ -331,7 +347,50 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
             </motion.div>
           </div>
 
-          {/* Draggable cards and rest of layout omitted for brevity */}
+          {/* Draggable project cards */}
+          <div className="mt-12 w-full">
+            <h3 className="text-sm font-medium text-zinc-500 mb-4 text-center">Drag a card to the chat to learn more</h3>
+            <div className="flex flex-wrap justify-center gap-4">
+              {cards.filter(card => !usedCardIds.has(card.id)).map((card) => (
+                <motion.div
+                  key={card.id}
+                  drag
+                  dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+                  dragElastic={1}
+                  onDragStart={() => {
+                    setDraggedCardId(card.id);
+                    setActiveDragCard(card);
+                    setDraggedOverChat(true);
+                  }}
+                  onDragEnd={(_, info) => handleDragEnd(card.id, info)}
+                  whileDrag={{ scale: 1.05, zIndex: 50 }}
+                  initial={{ rotate: card.rotation, opacity: 0, y: 20 }}
+                  animate={{ rotate: card.rotation, opacity: 1, y: 0 }}
+                  transition={{ duration: 0.4 }}
+                  className="cursor-grab active:cursor-grabbing"
+                >
+                  <div className="w-[200px] bg-white rounded-[14px] border border-black/[0.08] overflow-hidden shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition-shadow">
+                    <div className="relative w-full h-[120px] bg-zinc-100">
+                      <Image src={card.image} alt={card.title} fill className="object-cover" sizes="200px" />
+                    </div>
+                    <div className="p-3">
+                      <p className="text-[12px] font-medium text-zinc-900 leading-tight">{card.title}</p>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+            {usedCardIds.size > 0 && usedCardIds.size < cards.length && (
+              <p className="text-xs text-zinc-400 text-center mt-4">
+                {cards.length - usedCardIds.size} more {cards.length - usedCardIds.size === 1 ? 'card' : 'cards'} available
+              </p>
+            )}
+            {usedCardIds.size === cards.length && (
+              <p className="text-xs text-zinc-400 text-center mt-4">
+                All cards have been added to the conversation
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </section>
