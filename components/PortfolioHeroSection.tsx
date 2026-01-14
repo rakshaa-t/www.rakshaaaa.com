@@ -2,73 +2,29 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence, PanInfo } from 'framer-motion';
-import { ArrowUp, Sparkles, Paperclip, Trash2 } from 'lucide-react';
+import { ArrowUp, Sparkles, Paperclip, Trash2, Loader2 } from 'lucide-react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { ensureLightMode } from '../lib/utils';
+import { sendToAI, GREETING_MESSAGE, type ChatMessage } from '../lib/ai-chat';
 
 interface DraggableCard {
   id: string;
+  slug: string;
   image: string;
   title: string;
   subtitle: string;
   rotation: number;
 }
 
-interface ChatMessage {
-  id: string;
-  type: 'text' | 'card-with-question' | 'greeting';
-  content?: string;
-  card?: {
-    id: string;
-    image: string;
-    title: string;
-  };
-  sender: 'user' | 'system';
-  timestamp: number;
-}
-
 export interface PortfolioHeroSectionProps {
   cards?: DraggableCard[];
 }
 
-const TAB_ITEMS = [
-  { id: 'my-work', label: 'my work' },
-  { id: 'visuals', label: 'visuals' }
-];
-
-const CASE_STUDIES = [
-  {
-    id: 'case-1',
-    image: 'https://res.cloudinary.com/dky01erho/image/upload/v1760524296/6_3x_shots_so_y310gt.png',
-    title: 'Process Breakdown: Plasticity Brand & Website',
-    subtitle: 'Process Breakdown',
-    backgroundColor: 'bg-white',
-    borderColor: 'border-black/[0.06]'
-  },
-  {
-    id: 'case-2',
-    image: 'https://res.cloudinary.com/dky01erho/image/upload/v1760525138/172_2x_shots_so_plr79y.png',
-    title: 'Website Design and Development for Default.com',
-    subtitle: 'Process Breakdown',
-    backgroundColor: 'bg-white',
-    borderColor: 'border-black/[0.06]'
-  },
-  {
-    id: 'case-3',
-    image: 'https://res.cloudinary.com/dky01erho/image/upload/v1760525270/190_2x_shots_so_gytftu.png',
-    title: 'Creamier Branding Process Breakdown',
-    subtitle: 'Process Breakdown',
-    backgroundColor: 'bg-purple-200',
-    borderColor: 'border-purple-300'
-  },
-  {
-    id: 'case-4',
-    image: 'https://res.cloudinary.com/dky01erho/image/upload/v1760525328/19_2x_shots_so_lio1is.png',
-    title: 'Brand Strategy & Identity: Wayfinder Ventures',
-    subtitle: 'Process Breakdown',
-    backgroundColor: 'bg-cyan-400',
-    borderColor: 'border-cyan-500'
-  }
+const SUGGESTION_PILLS = [
+  "what's your design process?",
+  "do you take freelance work?",
+  "tell me about yourself"
 ];
 
 export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ cards: customCards }) => {
@@ -77,11 +33,12 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
   }, []);
 
   const [inputValue, setInputValue] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'greeting',
       type: 'greeting',
-      content: "Hi! I'm Raksha ! Nice to meet you. What's up ?",
+      content: GREETING_MESSAGE,
       sender: 'system',
       timestamp: Date.now()
     }
@@ -95,10 +52,10 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
   };
 
   const [draggedCardId, setDraggedCardId] = useState<string | null>(null);
-  const [activeDragCard, setActiveDragCard] = useState<DraggableCard | null>(null);
   const [draggedOverChat, setDraggedOverChat] = useState(false);
   const [usedCardIds, setUsedCardIds] = useState<Set<string>>(new Set());
   const [shouldAutoScroll, setShouldAutoScroll] = useState(false);
+  const [usedSuggestions, setUsedSuggestions] = useState<Set<string>>(new Set());
 
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -106,30 +63,34 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
   const defaultCards: DraggableCard[] = [
     {
       id: 'card-1',
+      slug: 'ova',
       image: 'https://res.cloudinary.com/dky01erho/image/upload/v1760524296/6_3x_shots_so_y310gt.png',
-      title: 'Ova : Period tracking app ',
-      subtitle: '',
+      title: 'Ova : Period tracking app',
+      subtitle: 'Product Design',
       rotation: -8
     },
     {
       id: 'card-2',
+      slug: 'greex',
       image: 'https://res.cloudinary.com/dky01erho/image/upload/v1760525138/172_2x_shots_so_plr79y.png',
-      title: 'Greex : Defi trading crypto platform',
-      subtitle: '',
+      title: 'Greex : DeFi trading platform',
+      subtitle: 'Product Design',
       rotation: -4
     },
     {
       id: 'card-3',
+      slug: 'ioc',
       image: 'https://res.cloudinary.com/dky01erho/image/upload/v1760525270/190_2x_shots_so_gytftu.png',
-      title: 'IOC : Vendor management platform ',
-      subtitle: '',
+      title: 'IOC : Vendor management platform',
+      subtitle: 'Product Design, Team Lead',
       rotation: 2
     },
     {
       id: 'card-4',
+      slug: 'dealdoc',
       image: 'https://res.cloudinary.com/dky01erho/image/upload/v1760525328/19_2x_shots_so_lio1is.png',
       title: 'Dealdoc : Deal management platform',
-      subtitle: '',
+      subtitle: 'Product Design',
       rotation: 6
     }
   ];
@@ -174,36 +135,71 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
     }
   }, [messages, scrollToBottom, shouldAutoScroll]);
 
-  const attachCard = useCallback((cardId: string) => {
+  // Get AI response
+  const getAIResponse = useCallback(async (userMessage: string, allMessages: ChatMessage[]) => {
+    setIsLoading(true);
+    try {
+      const response = await sendToAI(allMessages, userMessage);
+      const aiMessage: ChatMessage = {
+        id: `msg-${generateId()}`,
+        type: 'text',
+        content: response.message,
+        sender: 'system',
+        timestamp: Date.now()
+      };
+      setMessages(prev => [...prev, aiMessage]);
+      setShouldAutoScroll(true);
+    } catch (error) {
+      console.error('Failed to get AI response:', error);
+      const errorMessage: ChatMessage = {
+        id: `msg-${generateId()}`,
+        type: 'text',
+        content: "sorry, i'm having trouble connecting right now. try again in a sec",
+        sender: 'system',
+        timestamp: Date.now()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+      setShouldAutoScroll(true);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  const attachCard = useCallback(async (cardId: string) => {
     const card = cards.find(c => c.id === cardId);
     if (!card) return;
     if (messages.some(m => m.type === 'card-with-question' && m.card?.id === cardId)) return;
 
     const autoReplyMap: { [k: string]: string } = {
-      'card-1': 'Tell me more about Ova : Period tracking app. What was your design process?',
-      'card-2': 'What was the biggest challenge you came across while designing Greex?',
-      'card-3': "What is IOC's vendor management platform?",
-      'card-4': 'What did Dealdoc teach you about designing B2B saas?'
+      'card-1': 'Tell me more about Ova. What was your design process?',
+      'card-2': 'What was the biggest challenge you faced while designing Greex?',
+      'card-3': "What is IOC's vendor management platform about?",
+      'card-4': 'What did Dealdoc teach you about designing B2B SaaS?'
     };
+
+    const questionContent = autoReplyMap[cardId] || `Tell me about ${card.title}`;
 
     const newMessage: ChatMessage = {
       id: `msg-${generateId()}`,
       type: 'card-with-question',
-      content: autoReplyMap[cardId] || '',
+      content: questionContent,
       card: { id: card.id, image: card.image, title: card.title },
       sender: 'user',
       timestamp: Date.now()
     };
 
-    setMessages(prev => [...prev, newMessage]);
+    const updatedMessages = [...messages, newMessage];
+    setMessages(updatedMessages);
     setUsedCardIds(prev => new Set([...prev, cardId]));
     setShouldAutoScroll(true);
-  }, [cards, messages]);
+
+    // Get AI response for the card question
+    await getAIResponse(questionContent, updatedMessages);
+  }, [cards, messages, getAIResponse]);
 
   const handleDragEnd = useCallback((cardId: string, info: PanInfo) => {
     if (!chatContainerRef.current) {
       setDraggedCardId(null);
-      setActiveDragCard(null);
       setDraggedOverChat(false);
       return;
     }
@@ -214,37 +210,50 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
     const isInDropZone = dropX >= chatRect.left - margin && dropX <= chatRect.right + margin && dropY >= chatRect.top - margin && dropY <= chatRect.bottom + margin;
 
     setDraggedCardId(null);
-    setActiveDragCard(null);
     setDraggedOverChat(false);
 
     if (isInDropZone) attachCard(cardId);
   }, [attachCard]);
 
-  const handleSendMessage = () => {
-    if (!inputValue.trim()) return;
+  const handleSendMessage = useCallback(async (messageText?: string) => {
+    const text = messageText || inputValue;
+    if (!text.trim() || isLoading) return;
+
     const newMessage: ChatMessage = {
       id: `msg-${generateId()}`,
       type: 'text',
-      content: inputValue,
+      content: text,
       sender: 'user',
       timestamp: Date.now()
     };
-    setMessages(prev => [...prev, newMessage]);
+
+    const updatedMessages = [...messages, newMessage];
+    setMessages(updatedMessages);
     setInputValue('');
     setShouldAutoScroll(true);
-  };
+
+    // Get AI response
+    await getAIResponse(text, updatedMessages);
+  }, [inputValue, isLoading, messages, getAIResponse]);
+
+  const handleSuggestionClick = useCallback((suggestion: string) => {
+    if (usedSuggestions.has(suggestion) || isLoading) return;
+    setUsedSuggestions(prev => new Set([...prev, suggestion]));
+    handleSendMessage(suggestion);
+  }, [usedSuggestions, isLoading, handleSendMessage]);
 
   const handleClearConversation = () => {
     setMessages([
       {
         id: 'greeting',
         type: 'greeting',
-        content: "Hi! I'm Raksha ! Nice to meet you. What's up ?",
+        content: GREETING_MESSAGE,
         sender: 'system',
         timestamp: Date.now()
       }
     ]);
     setUsedCardIds(new Set());
+    setUsedSuggestions(new Set());
     if (typeof window !== 'undefined') localStorage.removeItem('portfolio_messages');
   };
 
@@ -270,14 +279,14 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
 
           <h2 className="mt-2 font-extrabold text-zinc-900 w-full text-center" style={{ fontSize: '44px' }}>
             <span>Visually stunning apps, softwares and</span>
-            <span> websites with functionality at it's core.</span>
+            <span> websites with functionality at its core.</span>
           </h2>
 
           <p className="mt-6 text-[20px] leading-6 text-zinc-700 w-full text-center">
             Raksha leads Product and Brand Design for startups, big thinkers and game changers. 6+ years of industry experience and 55+ clients so far
           </p>
 
-          {/* Chat + cards (full UI included) */}
+          {/* Chat container */}
           <div ref={chatContainerRef} className="mt-8 w-full rounded-[14px] border border-black/[0.08] bg-white p-2 shadow-[0_8px_32px_rgba(0,0,0,0.06)] transition-all" style={{ backgroundColor: draggedOverChat ? '#f8f9ff' : 'white' }}>
             <div className="messages-scroll-area rounded-[12px] border border-black/[0.08] bg-white px-4 py-4 max-h-[400px] overflow-y-auto space-y-3" aria-live="polite" aria-atomic="true" role="list">
               <AnimatePresence mode="popLayout">
@@ -288,7 +297,7 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
                         <Image src="https://storage.googleapis.com/storage.magicpath.ai/user/323295203727400960/assets/a162f3c9-9017-4e52-a2b7-d48614b32b0f.jpg" alt="Raksha avatar" width={32} height={32} className="w-8 h-8 rounded-full object-cover flex-shrink-0" style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.12)' }} />
                         {(message.type === 'greeting' || message.type === 'text') && (
                           <div className="bg-zinc-50 rounded-[12px] px-4 py-3 border border-black/[0.06]">
-                            <p className="text-[13px] text-zinc-700 leading-relaxed"><span>{message.content}</span></p>
+                            <p className="text-[13px] text-zinc-700 leading-relaxed">{message.content}</p>
                           </div>
                         )}
                       </div>
@@ -297,7 +306,7 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
                     {message.sender === 'user' && (
                       <div className="max-w-xs">
                         {message.type === 'text' && (
-                          <div className="bg-[#1D3BF1] rounded-[12px] px-4 py-3"><p className="text-[13px] text-white leading-relaxed"><span>{message.content}</span></p></div>
+                          <div className="bg-[#1D3BF1] rounded-[12px] px-4 py-3"><p className="text-[13px] text-white leading-relaxed">{message.content}</p></div>
                         )}
 
                         {message.type === 'card-with-question' && message.card && (
@@ -306,11 +315,11 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
                               <div className="relative w-full overflow-hidden bg-zinc-100" style={{ height: '140px' }}>
                                 <Image src={message.card.image} alt={message.card.title} fill className="object-cover" sizes="(max-width: 768px) 100vw, 320px" />
                               </div>
-                              <div className="p-3"><p className="text-[12px] text-zinc-900 italic leading-tight"><span>{message.card.title}</span></p></div>
+                              <div className="p-3"><p className="text-[12px] text-zinc-900 italic leading-tight">{message.card.title}</p></div>
                             </div>
 
                             <div className="bg-[#1D3BF1] rounded-[20px] px-5 py-4 shadow-md">
-                              <p className="text-[14px] text-white leading-relaxed"><span>{message.content}</span></p>
+                              <p className="text-[14px] text-white leading-relaxed">{message.content}</p>
                             </div>
                           </div>
                         )}
@@ -318,6 +327,18 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
                     )}
                   </motion.div>
                 ))}
+
+                {/* Loading indicator */}
+                {isLoading && (
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start">
+                    <div className="flex items-start gap-3 max-w-xs">
+                      <Image src="https://storage.googleapis.com/storage.magicpath.ai/user/323295203727400960/assets/a162f3c9-9017-4e52-a2b7-d48614b32b0f.jpg" alt="Raksha avatar" width={32} height={32} className="w-8 h-8 rounded-full object-cover flex-shrink-0" style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.12)' }} />
+                      <div className="bg-zinc-50 rounded-[12px] px-4 py-3 border border-black/[0.06]">
+                        <Loader2 className="h-4 w-4 animate-spin text-zinc-400" />
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
               </AnimatePresence>
               <div ref={messagesEndRef} />
             </div>
@@ -326,15 +347,40 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
               <div className="space-y-3">
                 <div className="flex items-center gap-4">
                   <Sparkles className="h-5 w-5 text-zinc-400 flex-shrink-0" strokeWidth={2} />
-                  <input type="text" value={inputValue} onChange={e => setInputValue(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSendMessage()} placeholder="Ask me about myself, my case studies, or my process." className="flex-1 bg-transparent text-[15px] text-zinc-900 placeholder:text-zinc-400 focus:outline-none" aria-label="Chat input" />
-                  <button onClick={handleSendMessage} className="inline-flex items-center gap-2 rounded-[16px] bg-[#0A0D1F] px-5 py-2.5 text-[14px] font-semibold text-white shadow-[0_4px_16px_rgba(10,13,31,0.2)] transition-all hover:bg-[#151829] focus:outline-none focus:ring-2 focus:ring-[#0A0D1F]">
-                    <ArrowUp className="h-4 w-4" strokeWidth={2.5} /><span>Send</span>
+                  <input
+                    type="text"
+                    value={inputValue}
+                    onChange={e => setInputValue(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && !isLoading && handleSendMessage()}
+                    placeholder="talk 2 me"
+                    className="flex-1 bg-transparent text-[15px] text-zinc-900 placeholder:text-zinc-400 focus:outline-none"
+                    aria-label="Chat input"
+                    disabled={isLoading}
+                  />
+                  <button
+                    onClick={() => handleSendMessage()}
+                    disabled={isLoading || !inputValue.trim()}
+                    className="inline-flex items-center gap-2 rounded-[16px] bg-[#0A0D1F] px-5 py-2.5 text-[14px] font-semibold text-white shadow-[0_4px_16px_rgba(10,13,31,0.2)] transition-all hover:bg-[#151829] focus:outline-none focus:ring-2 focus:ring-[#0A0D1F] disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" strokeWidth={2.5} />}
+                    <span>Send</span>
                   </button>
                 </div>
 
-                <div className="flex items-center gap-2 justify-end">
-                  <button onClick={handleClearConversation} className="inline-flex items-center gap-2 rounded-[16px] bg-zinc-100 px-5 py-2.5 text-[14px] font-medium text-zinc-600 hover:bg-zinc-200 focus:outline-none focus:ring-2">
-                    <Trash2 className="h-4 w-4" /><span>Clear</span>
+                {/* Suggestion pills */}
+                <div className="flex flex-wrap gap-2">
+                  {SUGGESTION_PILLS.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      onClick={() => handleSuggestionClick(suggestion)}
+                      disabled={usedSuggestions.has(suggestion) || isLoading}
+                      className="px-3 py-1.5 text-[12px] rounded-full border border-black/[0.08] text-zinc-600 hover:bg-zinc-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                  <button onClick={handleClearConversation} className="px-3 py-1.5 text-[12px] rounded-full border border-black/[0.08] text-zinc-400 hover:text-zinc-600 hover:bg-zinc-50 transition-colors flex items-center gap-1">
+                    <Trash2 className="h-3 w-3" /><span>clear</span>
                   </button>
                 </div>
 
@@ -349,7 +395,7 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
 
           {/* Draggable project cards */}
           <div className="mt-12 w-full">
-            <h3 className="text-sm font-medium text-zinc-500 mb-4 text-center">Drag a card to the chat to learn more</h3>
+            <h3 className="text-sm font-medium text-zinc-500 mb-4 text-center">Drag a card to the chat to learn more, or click to view case study</h3>
             <div className="flex flex-wrap justify-center gap-4">
               {cards.filter(card => !usedCardIds.has(card.id)).map((card) => (
                 <motion.div
@@ -359,7 +405,6 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
                   dragElastic={1}
                   onDragStart={() => {
                     setDraggedCardId(card.id);
-                    setActiveDragCard(card);
                     setDraggedOverChat(true);
                   }}
                   onDragEnd={(_, info) => handleDragEnd(card.id, info)}
@@ -369,14 +414,17 @@ export const PortfolioHeroSection: React.FC<PortfolioHeroSectionProps> = ({ card
                   transition={{ duration: 0.4 }}
                   className="cursor-grab active:cursor-grabbing"
                 >
-                  <div className="w-[200px] bg-white rounded-[14px] border border-black/[0.08] overflow-hidden shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition-shadow">
-                    <div className="relative w-full h-[120px] bg-zinc-100">
-                      <Image src={card.image} alt={card.title} fill className="object-cover" sizes="200px" />
+                  <Link href={`/case-studies/${card.slug}`} onClick={(e) => { if (draggedCardId) e.preventDefault(); }}>
+                    <div className="w-[200px] bg-white rounded-[14px] border border-black/[0.08] overflow-hidden shadow-[0_4px_16px_rgba(0,0,0,0.08)] hover:shadow-[0_8px_24px_rgba(0,0,0,0.12)] transition-shadow">
+                      <div className="relative w-full h-[120px] bg-zinc-100">
+                        <Image src={card.image} alt={card.title} fill className="object-cover" sizes="200px" />
+                      </div>
+                      <div className="p-3">
+                        <p className="text-[12px] font-medium text-zinc-900 leading-tight">{card.title}</p>
+                        {card.subtitle && <p className="text-[10px] text-zinc-500 mt-1">{card.subtitle}</p>}
+                      </div>
                     </div>
-                    <div className="p-3">
-                      <p className="text-[12px] font-medium text-zinc-900 leading-tight">{card.title}</p>
-                    </div>
-                  </div>
+                  </Link>
                 </motion.div>
               ))}
             </div>
